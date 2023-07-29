@@ -3,11 +3,20 @@ const path = require("path");
 const express = require("express");
 const bodyParser = require("body-parser");
 const mongoose = require("mongoose");
+const session = require("express-session");
+const MongoDbStore = require("connect-mongodb-session")(session);
 
 const errorController = require("./controllers/error");
 const User = require("./models/user");
 
+const MONGODB_URI =
+  "mongodb+srv://yazanfarrah03:yazan@cluster0.utlybpr.mongodb.net/shop";
+
 const app = express();
+const store = new MongoDbStore({
+  uri: MONGODB_URI,
+  collection: "sessions",
+});
 
 app.set("view engine", "ejs");
 //if we I the views folder which I do, I don't have to right the code below
@@ -16,9 +25,32 @@ app.set("views", "views");
 
 const adminRoutes = require("./routes/admin");
 const shopRoutes = require("./routes/shop");
+const authRoutes = require("./routes/auth");
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, "public")));
+app.use(
+  session({
+    secret: "my secret",
+    resave: false,
+    saveUninitialized: false,
+    store: store,
+  })
+);
+
+app.use((req, res, next) => {
+  if(!req.session.user){
+    return next();
+  }
+  User.findById(req.session.user._id)
+    .then((user) => {
+      req.user = user;
+      next();
+    })
+    .catch((err) => {
+      console.log(err);
+    });
+});
 
 app.use((req, res, next) => {
   User.findById("64b6d5458882014aeb4df84c")
@@ -31,6 +63,7 @@ app.use((req, res, next) => {
 
 app.use("/admin", adminRoutes);
 app.use(shopRoutes);
+app.use(authRoutes);
 
 app.use(errorController.get404);
 
@@ -47,13 +80,11 @@ app.use(errorController.get404);
 // };
 // startServer();
 mongoose
-  .connect(
-    "mongodb+srv://yazanfarrah03:yazan@cluster0.utlybpr.mongodb.net/shop?retryWrites=true&w=majority"
-  )
+  .connect(MONGODB_URI)
   .then((result) => {
     User.findOne()
       .then((user) => {
-        if(!user){
+        if (!user) {
           const user = new User({
             name: "Yazan",
             email: "Yaz@gmail.com",
@@ -63,9 +94,8 @@ mongoose
           });
           user.save();
         }
-        
       })
-      .catch(err =>console.log(err));
+      .catch((err) => console.log(err));
 
     console.log("DB connected");
     app.listen(3000);
